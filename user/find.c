@@ -107,6 +107,7 @@ void find(char* path, char* filename){
 }
 
 int main(int argc, char* argv[]){
+    //Check the number of parameters
     if(argc < 3){
         printf("Usage: find <path> <filename>\n");
         exit(1);

@@ -49,6 +49,7 @@ void find(char* path, char* filename){
     switch(st.type){
     case T_DEVICE:
 
+    //If the file is a regular file
     case T_FILE:
         //Compare name file with 'filename'
         if(strcmp(de.name, filename) == 0){
@@ -72,6 +73,7 @@ void find(char* path, char* filename){
 
         // Read folder in folder
         while(read(fd, &de, sizeof(de)) == sizeof(de)){
+            //Ignore empty files
             if(de.inum == 0){
                 continue;
             }
@@ -82,8 +84,10 @@ void find(char* path, char* filename){
             }
 
             //Re-initialize the path
+            //Copy 'buf' variable path
             memmove(buf, path, strlen(path));
             buf[strlen(path)] = '/';
+            //Append filename to path
             memmove(buf + strlen(path) + 1, de.name, strlen(de.name));
             buf[strlen(path) + 1 + strlen(de.name)] = '\0';
 

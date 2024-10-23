@@ -196,7 +196,7 @@ UPROGS=\
 	$U/_zombie\
 	$U/_pingpong\
 	$U/_xargs\
-	
+	$U/_primes\
 
 
 

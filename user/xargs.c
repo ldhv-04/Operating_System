@@ -3,7 +3,7 @@
 #include "user/user.h"
 #include "kernel/param.h"  // MAXARG
 
-#define IS_BLANK(chr) (chr == ' ' || chr == '\t')
+#define IS_BLANK(chr) (chr == ' ' || chr == '\t') // Dinh nghia macro de kiem tra ki tu trong mang buffer
 
 int main(int argc, char *argv[]) {
     char buffer[2048], curChar;
@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
 
     //Kiem tra tuy chon -n 
     if (argc > 2 && strcmp(argv[1], "-n") == 0) {
-        maxArgs = atoi(argv[2]);  // 
-		argc -= 2;
-        argv += 2;
+        maxArgs = atoi(argv[2]);  // Lay so luong doi so
+		argc -= 2; // Bo qua doi so -n va so luong doi so N
+        argv += 2; 
     }
 
     // sao chep cac doi so con lai vao tmp[]

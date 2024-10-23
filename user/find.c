@@ -20,6 +20,7 @@ char* fmtname(char *path){
         return p;
     }
 
+    //Correct the path and return the file name
     memmove(buf, p, strlen(p));
     buf[strlen(p)] = 0;
     return buf;

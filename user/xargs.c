@@ -57,14 +57,6 @@ int main(int argc, char *argv[]) {
         }
     }
 // 
-    if (j > argc - 1) { // Kiem tra cac doi so con sot lai
-        if (!fork()) {
-            tmp[j] = 0;  // Dam bao danh sach ket thuc bang null
-            exec(tmp[0], tmp);  
-            exit(0);
-        }
-        wait(0);
-    }
 
     exit(0);
 }

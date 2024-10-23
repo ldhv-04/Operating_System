@@ -1,3 +1,10 @@
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+void primes(int leftPipe[2]) __attribute__((noreturn));
+
+
 void primes(int leftPipe[2]) {
     int prime = -1, num = -1;
     

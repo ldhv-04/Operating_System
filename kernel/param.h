@@ -28,6 +28,5 @@
 #define USERSTACK    2     // user stack pages
 #else
 #define USERSTACK    1     // user stack pages
+#define MAXARG       100
 #endif
-
-

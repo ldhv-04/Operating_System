@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct sysinfo;
 
 // bio.c
 void            binit(void);
@@ -16,6 +17,7 @@ void            brelse(struct buf*);
 void            bwrite(struct buf*);
 void            bpin(struct buf*);
 void            bunpin(struct buf*);
+int             freemem(void);
 
 // console.c
 void            consoleinit(void);
@@ -69,6 +71,7 @@ void            initlog(int, struct superblock*);
 void            log_write(struct buf*);
 void            begin_op(void);
 void            end_op(void);
+int             nproc(void);
 
 // pipe.c
 int             pipealloc(struct file**, struct file**);
@@ -110,6 +113,9 @@ void            procdump(void);
 // swtch.S
 void            swtch(struct context*, struct context*);
 
+// sysinfo.c
+int             systeminfo(uint64);
+
 // spinlock.c
 void            acquire(struct spinlock*);
 int             holding(struct spinlock*);
@@ -136,7 +142,7 @@ char*           strncpy(char*, const char*, int);
 // syscall.c
 void            argint(int, int*);
 int             argstr(int, char*, int);
-void            argaddr(int, uint64 *);
+int             argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();

@@ -91,3 +91,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+int
+sys_sysinfo(void)
+{
+  uint64 info;
+
+  if(argaddr(0, &info) < 0){
+    return -1;
+  }
+  return systeminfo(info);
+}

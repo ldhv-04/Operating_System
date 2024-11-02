@@ -1,0 +1,300 @@
+diff --git a/Makefile b/Makefile
+index e5d4715..475a3bd 100644
+--- a/Makefile
++++ b/Makefile
+@@ -196,7 +196,8 @@ UPROGS=\
+ 	$U/_zombie\
+ 	$U/_pingpong\
+ 	$U/_xargs\
+-	
++	$U/_primes\
++	$U/_find\
+ 
+ 
+ 
+diff --git a/test.patch b/test.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/user/find.c b/user/find.c
+new file mode 100644
+index 0000000..f1af808
+--- /dev/null
++++ b/user/find.c
+@@ -0,0 +1,129 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++#include "kernel/fs.h"
++#include "kernel/fcntl.h"
++
++#define MAXPATH 512
++
++char* fmtname(char *path){
++    static char buf[DIRSIZ+1];
++    char* p;
++
++    //Find filename after '/'
++    for(p=path+strlen(path); p >= path && *p != '/'; p--)
++        ;
++    p++;
++
++    // Return filename or folder
++    if(strlen(p) >= DIRSIZ){
++        return p;
++    }
++
++    //Correct the path and return the file name
++    memmove(buf, p, strlen(p));
++    buf[strlen(p)] = 0;
++    return buf;
++}
++
++void find(char* path, char* filename){
++    char buf[MAXPATH];
++    int fd;
++    struct dirent de;
++    struct stat st;
++
++    //Open folder
++    if((fd = open(path, O_RDONLY)) < 0){
++        printf("file: can not open %s\n", path);
++        close(fd);
++        return;
++    }
++
++    // Get info file
++    if(fstat(fd, &st) < 0){
++        printf("find: can not open %s\n", path);
++        close(fd);
++        return;
++    }
++
++    switch(st.type){
++    //If it is a hardware file
++    case T_DEVICE:
++
++    //If the file is a regular file
++    case T_FILE:
++        //Compare name file with 'filename'
++        if(strcmp(de.name, filename) == 0){
++            //Print filepath
++            printf("%s\n", buf);
++        }
++        break;
++
++    case T_DIR:
++        //Check file length
++        if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
++            //File path too long
++            printf("find: path too long\n");
++            close(fd);
++            return;
++        }
++
++        //Open file
++        if((fd= open(path, 0)) < 0){
++            //Can not open file
++            printf("find: can not open %s\n", path);
++            return;
++        }
++
++        // Read folder in folder
++        while(read(fd, &de, sizeof(de)) == sizeof(de)){
++            //Ignore empty files
++            if(de.inum == 0){
++                continue;
++            }
++
++            //Skip "." and ".."
++            if(strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0){
++                continue;
++            }
++
++            //Re-initialize the path
++            //Copy 'buf' variable path
++            memmove(buf, path, strlen(path));
++            buf[strlen(path)] = '/';
++            //Append filename to path
++            memmove(buf + strlen(path) + 1, de.name, strlen(de.name));
++            buf[strlen(path) + 1 + strlen(de.name)] = '\0';
++
++            //Read file information
++            if(stat(buf, &st) < 0){
++                //Can not read file information
++                printf("find: can not stat %s\n", buf);
++               continue;
++            }
++
++            //Compare name file with 'filename'
++            if(st.type == T_FILE && strcmp(de.name, filename) == 0){
++                printf("%s\n", buf);
++            }
++
++            //Recursive if file is folder
++            if(st.type == T_DIR){
++                find(buf, filename);
++            }
++        }
++    }
++    close(fd);
++}
++
++int main(int argc, char* argv[]){
++    //Check the number of parameters
++    if(argc < 3){
++        //Intructions on how to use the find command
++        printf("Usage: find <path> <filename>\n");
++        exit(1);
++    }
++    //Find file name
++    find(argv[1], argv[2]);
++    exit(0);
++}
+\ No newline at end of file
+diff --git a/user/primes.c b/user/primes.c
+new file mode 100644
+index 0000000..3f81280
+--- /dev/null
++++ b/user/primes.c
+@@ -0,0 +1,70 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++
++void primes(int leftPipe[2]) __attribute__((noreturn));
++
++
++void primes(int leftPipe[2]) {
++    int prime = -1, num = -1;
++    
++    close(leftPipe[1]); // Close write end of the input pipe
++
++    // Read the first number from the pipe, which will be the prime
++    if (read(leftPipe[0], &prime, sizeof(prime)) == 0) {
++        // If no number is read, close the pipe and exit the process
++        close(leftPipe[0]);
++        exit(0);
++    }
++
++    // Print the prime number
++    printf("prime %d\n", prime);
++
++    int rightPipe[2];  // Create a new pipe for the next process
++    pipe(rightPipe);   // rightPipe will pass numbers to the next process
++
++    if (fork() == 0) { 
++        // Child process: recursive call to handle the next prime
++        close(leftPipe[0]);  // Close the parent's read end
++        primes(rightPipe);   // Pass the new pipe to the next child process
++    } else {
++        // Parent process: filter numbers and send them to the child
++        close(rightPipe[0]); // Close the read end of the rightPipe
++
++        // Read numbers from the leftPipe (input pipe)
++        while (read(leftPipe[0], &num, sizeof(num)) > 0) {
++            // Write the number to the next pipe if it is not divisible by the prime
++            if (num % prime != 0) {
++                write(rightPipe[1], &num, sizeof(num));
++            }
++        }
++
++        // Close pipes and wait for the child to finish
++        close(leftPipe[0]);  // Close the read end of the leftPipe
++        close(rightPipe[1]); // Close the write end of the rightPipe
++        wait(0);             // Wait for the child process to finish
++        exit(0);             // Exit the process after finishing
++    }
++}
++
++int main(int argc, char *argv[]) {
++    int pipeMain[2];  // Create a pipe for the main process
++    pipe(pipeMain);   // pipeMain will pass numbers from main to the first child
++
++    if (fork() == 0) {
++        // First child process: start filtering primes
++        primes(pipeMain);  // Pass the pipe to the primes function
++    } else {
++        // Main process: generate numbers and send them to the first child
++        close(pipeMain[0]);  // Close the read end of the pipe
++
++        // Write all numbers from 2 to 280 into the pipe
++        for (int i = 2; i <= 280; i++) {
++            write(pipeMain[1], &i, sizeof(i));
++        }
++
++        close(pipeMain[1]);  // Close the write end of the pipe
++        wait(0);             // Wait for the first child process to finish
++        exit(0);             // Exit the main process
++    }
++}
+\ No newline at end of file
+diff --git a/user/xargs.c b/user/xargs.c
+index e16678e..3686f80 100644
+--- a/user/xargs.c
++++ b/user/xargs.c
+@@ -3,7 +3,7 @@
+ #include "user/user.h"
+ #include "kernel/param.h"  // MAXARG
+ 
+-#define IS_BLANK(chr) (chr == ' ' || chr == '\t')
++#define IS_BLANK(chr) (chr == ' ' || chr == '\t') // Dinh nghia macro de kiem tra ki tu trong mang buffer
+ 
+ int main(int argc, char *argv[]) {
+     char buffer[2048], curChar;
+@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
+ 
+     //Kiem tra tuy chon -n 
+     if (argc > 2 && strcmp(argv[1], "-n") == 0) {
+-        maxArgs = atoi(argv[2]);  // 
+-		argc -= 2;
+-        argv += 2;
++        maxArgs = atoi(argv[2]);  // Lay so luong doi so
++		argc -= 2; // Bo qua doi so -n va so luong doi so N
++        argv += 2; 
+     }
+ 
+     // sao chep cac doi so con lai vao tmp[]
+@@ -27,18 +27,18 @@ int main(int argc, char *argv[]) {
+     --j;
+ 
+     while (read(0, &curChar, 1) > 0) {   // Doc du lieu tu stdin
+-        if (IS_BLANK(curChar)) {
++        if (IS_BLANK(curChar)) { // Kiem tra khoang trang
+             blankCount++;
+             continue;
+         }
+         if (blankCount) {
+-            buffer[bufferOffset++] = 0;
+-            tmp[j++] = curPos;
+-            curPos = buffer + bufferOffset;
+-            blankCount = 0;
++            buffer[bufferOffset++] = 0; // Them 0 vao cuoi buffer de ket thuc chuoi
++            tmp[j++] = curPos; // Them doi so vao tmp
++            curPos = buffer + bufferOffset; // Chuyen vi tri cuoi cung cua buffer thanh vi tri cuoi cung cua tmp
++            blankCount = 0; 
+         }
+         if (curChar != '\n') {
+-            buffer[bufferOffset++] = curChar;
++            buffer[bufferOffset++] = curChar; // Them gia tri stdin vao buffer
+         } else {
+             buffer[bufferOffset++] = 0;
+             tmp[j++] = curPos;
+@@ -48,15 +48,15 @@ int main(int argc, char *argv[]) {
+             if ((j - (argc - 1)) >= maxArgs) { 
+                 if (!fork()) {
+                     tmp[j] = 0;  // Dam bao danh sach ket thuc bang null
+-                    exec(tmp[0], tmp);
++                    exec(tmp[0], tmp); // Thuc thi chuoi lenh duoc luu trong tmp
+                     exit(0);
+                 }
+-                wait(0);
++                wait(0); // Doi tien trinh con hoan thanh
+                 j = argc - 1;  // reset lai j sau khi thuc thi het doi so
+             }
+         }
+     }
+-// 
++
+     if (j > argc - 1) { // Kiem tra cac doi so con sot lai
+         if (!fork()) {
+             tmp[j] = 0;  // Dam bao danh sach ket thuc bang null

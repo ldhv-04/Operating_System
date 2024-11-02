@@ -59,6 +59,10 @@
   "files.associations": {
     "types.h": "c",
     "chrono": "c",
-    "variant": "c"
+    "variant": "c",
+    "defs.h": "c",
+    "proc.h": "c",
+    "sysinfo.h": "c",
+    "user.h": "c"
   }
 }

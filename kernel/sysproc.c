@@ -101,3 +101,12 @@ sys_sysinfo(void)
   }
   return systeminfo(info);
 }
+int
+sys_trace(void)
+{
+  int traceMask;
+  argint(0, &traceMask);
+  struct proc *p = myproc();   // Get the current process
+  p->mask = traceMask;         // Set the trace mask for this process
+  return 0;
+}

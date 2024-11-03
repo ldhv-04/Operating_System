@@ -20,8 +20,8 @@ void primes(int leftPipe[2]) {
     // Print the prime number
     printf("prime %d\n", prime);
 
-    int rightPipe[2];  // Create a new pipe for the next process
-    pipe(rightPipe);   // rightPipe will pass numbers to the next process
+    int rightPipe[2];  
+    pipe(rightPipe);   //Create a new pipe for the next processs
 
     if (fork() == 0) { 
         // Child process: recursive call to handle the next prime

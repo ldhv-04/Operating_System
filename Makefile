@@ -198,6 +198,7 @@ UPROGS=\
 	$U/_pingpong\
 	$U/_xargs\
 	$U/_primes\
+	$U/_trace\
 	$U/_find\
 	$U/_sysinfotest\
 

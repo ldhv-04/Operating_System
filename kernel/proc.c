@@ -295,12 +295,12 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-  
-  //copy mask
-  np->trace_mask = p->trace_mask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
+
+  //copy mask
+  np->trace_mask = p->trace_mask;
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;

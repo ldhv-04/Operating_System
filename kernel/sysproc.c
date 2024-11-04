@@ -108,6 +108,5 @@ sys_trace(void)
   int traceMask;
   argint(0, &traceMask);
   myproc()->trace_mask = traceMask;         // Set the trace mask for this process
-  myproc()->traced = 1;     // Enable tracking
   return 0;
 }

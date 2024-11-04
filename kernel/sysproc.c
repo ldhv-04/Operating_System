@@ -102,11 +102,12 @@ sys_sysinfo(void)
   return systeminfo(info);
 }
 
-int
+uint64
 sys_trace(void)
 {
-  int traceMask;
-  argint(0, &traceMask);
-  myproc()->trace_mask = traceMask;         // Set the trace mask for this process
+  int mask;
+  argint(0, &mask);
+  struct proc *p = myproc();
+  p->trace_mask = mask;         // Set the trace mask for this process
   return 0;
 }

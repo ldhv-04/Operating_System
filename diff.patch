@@ -1,0 +1,863 @@
+diff --git a/.vscode/settings.json b/.vscode/settings.json
+index a9ad686..72d38be 100644
+--- a/.vscode/settings.json
++++ b/.vscode/settings.json
+@@ -59,6 +59,10 @@
+   "files.associations": {
+     "types.h": "c",
+     "chrono": "c",
+-    "variant": "c"
++    "variant": "c",
++    "defs.h": "c",
++    "proc.h": "c",
++    "sysinfo.h": "c",
++    "user.h": "c"
+   }
+ }
+\ No newline at end of file
+diff --git a/22120437_22120444_22120453.patch b/22120437_22120444_22120453.patch
+new file mode 100644
+index 0000000..206777a
+--- /dev/null
++++ b/22120437_22120444_22120453.patch
+@@ -0,0 +1,300 @@
++diff --git a/Makefile b/Makefile
++index e5d4715..475a3bd 100644
++--- a/Makefile
+++++ b/Makefile
++@@ -196,7 +196,8 @@ UPROGS=\
++ 	$U/_zombie\
++ 	$U/_pingpong\
++ 	$U/_xargs\
++-	
+++	$U/_primes\
+++	$U/_find\
++ 
++ 
++ 
++diff --git a/test.patch b/test.patch
++new file mode 100644
++index 0000000..e69de29
++diff --git a/user/find.c b/user/find.c
++new file mode 100644
++index 0000000..f1af808
++--- /dev/null
+++++ b/user/find.c
++@@ -0,0 +1,129 @@
+++#include "kernel/types.h"
+++#include "kernel/stat.h"
+++#include "user/user.h"
+++#include "kernel/fs.h"
+++#include "kernel/fcntl.h"
+++
+++#define MAXPATH 512
+++
+++char* fmtname(char *path){
+++    static char buf[DIRSIZ+1];
+++    char* p;
+++
+++    //Find filename after '/'
+++    for(p=path+strlen(path); p >= path && *p != '/'; p--)
+++        ;
+++    p++;
+++
+++    // Return filename or folder
+++    if(strlen(p) >= DIRSIZ){
+++        return p;
+++    }
+++
+++    //Correct the path and return the file name
+++    memmove(buf, p, strlen(p));
+++    buf[strlen(p)] = 0;
+++    return buf;
+++}
+++
+++void find(char* path, char* filename){
+++    char buf[MAXPATH];
+++    int fd;
+++    struct dirent de;
+++    struct stat st;
+++
+++    //Open folder
+++    if((fd = open(path, O_RDONLY)) < 0){
+++        printf("file: can not open %s\n", path);
+++        close(fd);
+++        return;
+++    }
+++
+++    // Get info file
+++    if(fstat(fd, &st) < 0){
+++        printf("find: can not open %s\n", path);
+++        close(fd);
+++        return;
+++    }
+++
+++    switch(st.type){
+++    //If it is a hardware file
+++    case T_DEVICE:
+++
+++    //If the file is a regular file
+++    case T_FILE:
+++        //Compare name file with 'filename'
+++        if(strcmp(de.name, filename) == 0){
+++            //Print filepath
+++            printf("%s\n", buf);
+++        }
+++        break;
+++
+++    case T_DIR:
+++        //Check file length
+++        if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
+++            //File path too long
+++            printf("find: path too long\n");
+++            close(fd);
+++            return;
+++        }
+++
+++        //Open file
+++        if((fd= open(path, 0)) < 0){
+++            //Can not open file
+++            printf("find: can not open %s\n", path);
+++            return;
+++        }
+++
+++        // Read folder in folder
+++        while(read(fd, &de, sizeof(de)) == sizeof(de)){
+++            //Ignore empty files
+++            if(de.inum == 0){
+++                continue;
+++            }
+++
+++            //Skip "." and ".."
+++            if(strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0){
+++                continue;
+++            }
+++
+++            //Re-initialize the path
+++            //Copy 'buf' variable path
+++            memmove(buf, path, strlen(path));
+++            buf[strlen(path)] = '/';
+++            //Append filename to path
+++            memmove(buf + strlen(path) + 1, de.name, strlen(de.name));
+++            buf[strlen(path) + 1 + strlen(de.name)] = '\0';
+++
+++            //Read file information
+++            if(stat(buf, &st) < 0){
+++                //Can not read file information
+++                printf("find: can not stat %s\n", buf);
+++               continue;
+++            }
+++
+++            //Compare name file with 'filename'
+++            if(st.type == T_FILE && strcmp(de.name, filename) == 0){
+++                printf("%s\n", buf);
+++            }
+++
+++            //Recursive if file is folder
+++            if(st.type == T_DIR){
+++                find(buf, filename);
+++            }
+++        }
+++    }
+++    close(fd);
+++}
+++
+++int main(int argc, char* argv[]){
+++    //Check the number of parameters
+++    if(argc < 3){
+++        //Intructions on how to use the find command
+++        printf("Usage: find <path> <filename>\n");
+++        exit(1);
+++    }
+++    //Find file name
+++    find(argv[1], argv[2]);
+++    exit(0);
+++}
++\ No newline at end of file
++diff --git a/user/primes.c b/user/primes.c
++new file mode 100644
++index 0000000..3f81280
++--- /dev/null
+++++ b/user/primes.c
++@@ -0,0 +1,70 @@
+++#include "kernel/types.h"
+++#include "kernel/stat.h"
+++#include "user/user.h"
+++
+++void primes(int leftPipe[2]) __attribute__((noreturn));
+++
+++
+++void primes(int leftPipe[2]) {
+++    int prime = -1, num = -1;
+++    
+++    close(leftPipe[1]); // Close write end of the input pipe
+++
+++    // Read the first number from the pipe, which will be the prime
+++    if (read(leftPipe[0], &prime, sizeof(prime)) == 0) {
+++        // If no number is read, close the pipe and exit the process
+++        close(leftPipe[0]);
+++        exit(0);
+++    }
+++
+++    // Print the prime number
+++    printf("prime %d\n", prime);
+++
+++    int rightPipe[2];  // Create a new pipe for the next process
+++    pipe(rightPipe);   // rightPipe will pass numbers to the next process
+++
+++    if (fork() == 0) { 
+++        // Child process: recursive call to handle the next prime
+++        close(leftPipe[0]);  // Close the parent's read end
+++        primes(rightPipe);   // Pass the new pipe to the next child process
+++    } else {
+++        // Parent process: filter numbers and send them to the child
+++        close(rightPipe[0]); // Close the read end of the rightPipe
+++
+++        // Read numbers from the leftPipe (input pipe)
+++        while (read(leftPipe[0], &num, sizeof(num)) > 0) {
+++            // Write the number to the next pipe if it is not divisible by the prime
+++            if (num % prime != 0) {
+++                write(rightPipe[1], &num, sizeof(num));
+++            }
+++        }
+++
+++        // Close pipes and wait for the child to finish
+++        close(leftPipe[0]);  // Close the read end of the leftPipe
+++        close(rightPipe[1]); // Close the write end of the rightPipe
+++        wait(0);             // Wait for the child process to finish
+++        exit(0);             // Exit the process after finishing
+++    }
+++}
+++
+++int main(int argc, char *argv[]) {
+++    int pipeMain[2];  // Create a pipe for the main process
+++    pipe(pipeMain);   // pipeMain will pass numbers from main to the first child
+++
+++    if (fork() == 0) {
+++        // First child process: start filtering primes
+++        primes(pipeMain);  // Pass the pipe to the primes function
+++    } else {
+++        // Main process: generate numbers and send them to the first child
+++        close(pipeMain[0]);  // Close the read end of the pipe
+++
+++        // Write all numbers from 2 to 280 into the pipe
+++        for (int i = 2; i <= 280; i++) {
+++            write(pipeMain[1], &i, sizeof(i));
+++        }
+++
+++        close(pipeMain[1]);  // Close the write end of the pipe
+++        wait(0);             // Wait for the first child process to finish
+++        exit(0);             // Exit the main process
+++    }
+++}
++\ No newline at end of file
++diff --git a/user/xargs.c b/user/xargs.c
++index e16678e..3686f80 100644
++--- a/user/xargs.c
+++++ b/user/xargs.c
++@@ -3,7 +3,7 @@
++ #include "user/user.h"
++ #include "kernel/param.h"  // MAXARG
++ 
++-#define IS_BLANK(chr) (chr == ' ' || chr == '\t')
+++#define IS_BLANK(chr) (chr == ' ' || chr == '\t') // Dinh nghia macro de kiem tra ki tu trong mang buffer
++ 
++ int main(int argc, char *argv[]) {
++     char buffer[2048], curChar;
++@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
++ 
++     //Kiem tra tuy chon -n 
++     if (argc > 2 && strcmp(argv[1], "-n") == 0) {
++-        maxArgs = atoi(argv[2]);  // 
++-		argc -= 2;
++-        argv += 2;
+++        maxArgs = atoi(argv[2]);  // Lay so luong doi so
+++		argc -= 2; // Bo qua doi so -n va so luong doi so N
+++        argv += 2; 
++     }
++ 
++     // sao chep cac doi so con lai vao tmp[]
++@@ -27,18 +27,18 @@ int main(int argc, char *argv[]) {
++     --j;
++ 
++     while (read(0, &curChar, 1) > 0) {   // Doc du lieu tu stdin
++-        if (IS_BLANK(curChar)) {
+++        if (IS_BLANK(curChar)) { // Kiem tra khoang trang
++             blankCount++;
++             continue;
++         }
++         if (blankCount) {
++-            buffer[bufferOffset++] = 0;
++-            tmp[j++] = curPos;
++-            curPos = buffer + bufferOffset;
++-            blankCount = 0;
+++            buffer[bufferOffset++] = 0; // Them 0 vao cuoi buffer de ket thuc chuoi
+++            tmp[j++] = curPos; // Them doi so vao tmp
+++            curPos = buffer + bufferOffset; // Chuyen vi tri cuoi cung cua buffer thanh vi tri cuoi cung cua tmp
+++            blankCount = 0; 
++         }
++         if (curChar != '\n') {
++-            buffer[bufferOffset++] = curChar;
+++            buffer[bufferOffset++] = curChar; // Them gia tri stdin vao buffer
++         } else {
++             buffer[bufferOffset++] = 0;
++             tmp[j++] = curPos;
++@@ -48,15 +48,15 @@ int main(int argc, char *argv[]) {
++             if ((j - (argc - 1)) >= maxArgs) { 
++                 if (!fork()) {
++                     tmp[j] = 0;  // Dam bao danh sach ket thuc bang null
++-                    exec(tmp[0], tmp);
+++                    exec(tmp[0], tmp); // Thuc thi chuoi lenh duoc luu trong tmp
++                     exit(0);
++                 }
++-                wait(0);
+++                wait(0); // Doi tien trinh con hoan thanh
++                 j = argc - 1;  // reset lai j sau khi thuc thi het doi so
++             }
++         }
++     }
++-// 
+++
++     if (j > argc - 1) { // Kiem tra cac doi so con sot lai
++         if (!fork()) {
++             tmp[j] = 0;  // Dam bao danh sach ket thuc bang null
+diff --git a/Makefile b/Makefile
+index 475a3bd..18dd662 100644
+--- a/Makefile
++++ b/Makefile
+@@ -30,7 +30,8 @@ OBJS = \
+   $K/sysfile.o \
+   $K/kernelvec.o \
+   $K/plic.o \
+-  $K/virtio_disk.o
++  $K/virtio_disk.o\
++  $K/sysinfo.o
+ 
+ OBJS_KCSAN = \
+   $K/start.o \
+@@ -197,7 +198,9 @@ UPROGS=\
+ 	$U/_pingpong\
+ 	$U/_xargs\
+ 	$U/_primes\
++	$U/_trace\
+ 	$U/_find\
++	$U/_sysinfotest\
+ 
+ 
+ 
+diff --git a/kernel/defs.h b/kernel/defs.h
+index d1b6bb9..e7b4272 100644
+--- a/kernel/defs.h
++++ b/kernel/defs.h
+@@ -8,6 +8,7 @@ struct spinlock;
+ struct sleeplock;
+ struct stat;
+ struct superblock;
++struct sysinfo;
+ 
+ // bio.c
+ void            binit(void);
+@@ -16,6 +17,7 @@ void            brelse(struct buf*);
+ void            bwrite(struct buf*);
+ void            bpin(struct buf*);
+ void            bunpin(struct buf*);
++int             freemem(void);
+ 
+ // console.c
+ void            consoleinit(void);
+@@ -69,6 +71,7 @@ void            initlog(int, struct superblock*);
+ void            log_write(struct buf*);
+ void            begin_op(void);
+ void            end_op(void);
++int             nproc(void);
+ 
+ // pipe.c
+ int             pipealloc(struct file**, struct file**);
+@@ -110,6 +113,9 @@ void            procdump(void);
+ // swtch.S
+ void            swtch(struct context*, struct context*);
+ 
++// sysinfo.c
++int             systeminfo(uint64);
++
+ // spinlock.c
+ void            acquire(struct spinlock*);
+ int             holding(struct spinlock*);
+@@ -136,7 +142,7 @@ char*           strncpy(char*, const char*, int);
+ // syscall.c
+ void            argint(int, int*);
+ int             argstr(int, char*, int);
+-void            argaddr(int, uint64 *);
++int             argaddr(int, uint64 *);
+ int             fetchstr(uint64, char*, int);
+ int             fetchaddr(uint64, uint64*);
+ void            syscall();
+diff --git a/kernel/kalloc.c b/kernel/kalloc.c
+index 0699e7e..a14c916 100644
+--- a/kernel/kalloc.c
++++ b/kernel/kalloc.c
+@@ -8,6 +8,7 @@
+ #include "spinlock.h"
+ #include "riscv.h"
+ #include "defs.h"
++#include "proc.h"
+ 
+ void freerange(void *pa_start, void *pa_end);
+ 
+@@ -80,3 +81,19 @@ kalloc(void)
+     memset((char*)r, 5, PGSIZE); // fill with junk
+   return (void*)r;
+ }
++
++int
++freemem(void)
++{
++  int n = 0;
++  struct run *r;
++  acquire(&kmem.lock);
++  
++  for (r = kmem.freelist; r; r = r->next)
++    ++n;
++
++  release(&kmem.lock);
++
++  return n * 4096;
++}
++
+diff --git a/kernel/proc.c b/kernel/proc.c
+index 130d9ce..dc38d9a 100644
+--- a/kernel/proc.c
++++ b/kernel/proc.c
+@@ -299,6 +299,9 @@ fork(void)
+   // copy saved user registers.
+   *(np->trapframe) = *(p->trapframe);
+ 
++  //copy mask
++  np->trace_mask = p->trace_mask;
++
+   // Cause fork to return 0 in the child.
+   np->trapframe->a0 = 0;
+ 
+@@ -693,3 +696,19 @@ procdump(void)
+     printf("\n");
+   }
+ }
++
++
++int nproc(void)
++{
++    int n = 0;
++  struct proc *p;
++
++  for(p = proc; p < &proc[NPROC]; p++) {
++    acquire(&p->lock);
++    if(p->state != UNUSED)
++      ++n;
++    release(&p->lock);
++  }
++
++  return n;
++}
+diff --git a/kernel/proc.h b/kernel/proc.h
+index d021857..1456bbd 100644
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -104,4 +104,5 @@ struct proc {
+   struct file *ofile[NOFILE];  // Open files
+   struct inode *cwd;           // Current directory
+   char name[16];               // Process name (debugging)
++  int trace_mask;              // Bit mask
+ };
+diff --git a/kernel/syscall.c b/kernel/syscall.c
+index ed65409..c0fe8a0 100644
+--- a/kernel/syscall.c
++++ b/kernel/syscall.c
+@@ -62,10 +62,11 @@ argint(int n, int *ip)
+ // Retrieve an argument as a pointer.
+ // Doesn't check for legality, since
+ // copyin/copyout will do that.
+-void
++int
+ argaddr(int n, uint64 *ip)
+ {
+   *ip = argraw(n);
++  return 0;
+ }
+ 
+ // Fetch the nth word-sized system call argument as a null-terminated string.
+@@ -101,6 +102,8 @@ extern uint64 sys_unlink(void);
+ extern uint64 sys_link(void);
+ extern uint64 sys_mkdir(void);
+ extern uint64 sys_close(void);
++extern uint64 sys_sysinfo(void);
++extern uint64 sys_trace(void);
+ 
+ // An array mapping syscall numbers from syscall.h
+ // to the function that handles the system call.
+@@ -126,8 +129,34 @@ static uint64 (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_sysinfo] sys_sysinfo,
++[SYS_trace]   sys_trace,
++};
++static char* names[]={
++  [SYS_fork]   "fork",
++  [SYS_exit]   "exit",
++  [SYS_wait]   "wait",
++  [SYS_pipe]   "pipe",
++  [SYS_read]   "read",
++  [SYS_kill]   "kill",
++  [SYS_exec]   "exec",
++  [SYS_fstat]  "fstat",
++  [SYS_chdir]  "chdir",
++  [SYS_dup]    "dup",
++  [SYS_getpid] "getpid",
++  [SYS_sbrk]   "sbrk",
++  [SYS_sleep]  "sleep",
++  [SYS_uptime] "uptime",
++  [SYS_open]   "open",
++  [SYS_write]  "write",
++  [SYS_mknod]  "mknod",
++  [SYS_unlink] "unlink",
++  [SYS_link]   "link",
++  [SYS_mkdir]  "mkdir",
++  [SYS_close]  "close",
++  [SYS_sysinfo] "sysinfo",
++  [SYS_trace]   "trace",
+ };
+-
+ void
+ syscall(void)
+ {
+@@ -139,6 +168,9 @@ syscall(void)
+     // Use num to lookup the system call function for num, call it,
+     // and store its return value in p->trapframe->a0
+     p->trapframe->a0 = syscalls[num]();
++    if (p->trace_mask >> num) {
++  	    printf("%d: syscall %s -> %lu\n", p->pid, names[num], p->trapframe->a0);
++       }
+   } else {
+     printf("%d %s: unknown sys call %d\n",
+             p->pid, p->name, num);
+diff --git a/kernel/syscall.h b/kernel/syscall.h
+index bc5f356..2db92ab 100644
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,5 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_sysinfo 22
++#define SYS_trace 23
+diff --git a/kernel/sysinfo.c b/kernel/sysinfo.c
+new file mode 100644
+index 0000000..b5c7115
+--- /dev/null
++++ b/kernel/sysinfo.c
+@@ -0,0 +1,23 @@
++#include "types.h"
++#include "riscv.h"
++#include "param.h"
++#include "spinlock.h"
++#include "defs.h"
++#include "sysinfo.h"
++#include "proc.h"
++
++
++// Get current system info
++// addr is a user virtual address, pointing to a struct sysinfo.
++int
++systeminfo(uint64 addr) {
++  struct proc *p = myproc();
++  struct sysinfo info;
++
++  info.freemem = freemem();
++  info.nproc = nproc();
++
++  if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
++    return -1;
++  return 0;
++}
+diff --git a/kernel/sysinfo.h b/kernel/sysinfo.h
+new file mode 100644
+index 0000000..7e02b35
+--- /dev/null
++++ b/kernel/sysinfo.h
+@@ -0,0 +1,4 @@
++struct sysinfo {
++    uint64 freemem;   // Số lượng bộ nhớ trống (tính bằng byte)
++    uint64 nproc;     // Số lượng tiến trình đang hoạt động
++};
+\ No newline at end of file
+diff --git a/kernel/sysproc.c b/kernel/sysproc.c
+index 3b4d5bd..eb1ac16 100644
+--- a/kernel/sysproc.c
++++ b/kernel/sysproc.c
+@@ -91,3 +91,23 @@ sys_uptime(void)
+   release(&tickslock);
+   return xticks;
+ }
++int
++sys_sysinfo(void)
++{
++  uint64 info;
++
++  if(argaddr(0, &info) < 0){
++    return -1;
++  }
++  return systeminfo(info);
++}
++
++uint64
++sys_trace(void)
++{
++  int mask;
++  argint(0, &mask);
++  struct proc *p = myproc();
++  p->trace_mask = mask;         // Set the trace mask for this process
++  return 0;
++}
+\ No newline at end of file
+diff --git a/test.patch b/test.patch
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/user/primes.c b/user/primes.c
+index 3f81280..fc1788e 100644
+--- a/user/primes.c
++++ b/user/primes.c
+@@ -20,8 +20,8 @@ void primes(int leftPipe[2]) {
+     // Print the prime number
+     printf("prime %d\n", prime);
+ 
+-    int rightPipe[2];  // Create a new pipe for the next process
+-    pipe(rightPipe);   // rightPipe will pass numbers to the next process
++    int rightPipe[2];  
++    pipe(rightPipe);   //Create a new pipe for the next processs
+ 
+     if (fork() == 0) { 
+         // Child process: recursive call to handle the next prime
+diff --git a/user/sysinfotest.c b/user/sysinfotest.c
+new file mode 100644
+index 0000000..abd75c5
+--- /dev/null
++++ b/user/sysinfotest.c
+@@ -0,0 +1,153 @@
++#include "kernel/types.h"
++#include "kernel/riscv.h"
++#include "kernel/sysinfo.h"
++#include "user/user.h"
++
++
++void
++sinfo(struct sysinfo *info) {
++  if (sysinfo(info) < 0) {
++    printf("FAIL: sysinfo failed");
++    exit(1);
++  }
++}
++
++//
++// use sbrk() to count how many free physical memory pages there are.
++//
++int
++countfree()
++{
++  uint64 sz0 = (uint64)sbrk(0);
++  struct sysinfo info;
++  int n = 0;
++
++  while(1){
++    if((uint64)sbrk(PGSIZE) == 0xffffffffffffffff){
++      break;
++    }
++    n += PGSIZE;
++  }
++  sinfo(&info);
++  if (info.freemem != 0) {
++    printf("FAIL: there is no free mem, but sysinfo.freemem=%ld\n",
++      info.freemem);
++    exit(1);
++  }
++  sbrk(-((uint64)sbrk(0) - sz0));
++  return n;
++}
++
++void
++testmem() {
++  struct sysinfo info;
++  uint64 n = countfree();
++  
++  sinfo(&info);
++
++  if (info.freemem!= n) {
++    printf("FAIL: free mem %ld (bytes) instead of %ld\n", info.freemem, n);
++    exit(1);
++  }
++  
++  if((uint64)sbrk(PGSIZE) == 0xffffffffffffffff){
++    printf("sbrk failed");
++    exit(1);
++  }
++
++  sinfo(&info);
++    
++  if (info.freemem != n-PGSIZE) {
++    printf("FAIL: free mem %ld (bytes) instead of %ld\n", n-PGSIZE, info.freemem);
++    exit(1);
++  }
++  
++  if((uint64)sbrk(-PGSIZE) == 0xffffffffffffffff){
++    printf("sbrk failed");
++    exit(1);
++  }
++
++  sinfo(&info);
++    
++  if (info.freemem != n) {
++    printf("FAIL: free mem %ld (bytes) instead of %ld\n", n, info.freemem);
++    exit(1);
++  }
++}
++
++void
++testcall() {
++  struct sysinfo info;
++  
++  if (sysinfo(&info) < 0) {
++    printf("FAIL: sysinfo failed\n");
++    exit(1);
++  }
++
++  if (sysinfo((struct sysinfo *) 0xeaeb0b5b00002f5e) !=  0xffffffffffffffff) {
++    printf("FAIL: sysinfo succeeded with bad argument\n");
++    exit(1);
++  }
++}
++
++void testproc() {
++  struct sysinfo info;
++  uint64 nproc;
++  int status;
++  int pid;
++  
++  sinfo(&info);
++  nproc = info.nproc;
++
++  pid = fork();
++  if(pid < 0){
++    printf("sysinfotest: fork failed\n");
++    exit(1);
++  }
++  if(pid == 0){
++    sinfo(&info);
++    if(info.nproc != nproc+1) {
++      printf("sysinfotest: FAIL nproc is %ld instead of %ld\n", info.nproc, nproc+1);
++      exit(1);
++    }
++    exit(0);
++  }
++  wait(&status);
++  sinfo(&info);
++  if(info.nproc != nproc) {
++      printf("sysinfotest: FAIL nproc is %ld instead of %ld\n", info.nproc, nproc);
++      exit(1);
++  }
++}
++
++void testbad() {
++  int pid = fork();
++  int xstatus;
++  
++  if(pid < 0){
++    printf("sysinfotest: fork failed\n");
++    exit(1);
++  }
++  if(pid == 0){
++      sinfo(0x0);
++      exit(0);
++  }
++  wait(&xstatus);
++  if(xstatus == -1)  // kernel killed child?
++    exit(0);
++  else {
++    printf("sysinfotest: testbad succeeded %d\n", xstatus);
++    exit(xstatus);
++  }
++}
++
++int
++main(int argc, char *argv[])
++{
++  printf("sysinfotest: start\n");
++  testcall();
++  testmem();
++  testproc();
++  printf("sysinfotest: OK\n");
++  exit(0);
++}
+\ No newline at end of file
+diff --git a/user/trace.c b/user/trace.c
+new file mode 100644
+index 0000000..fd77e26
+--- /dev/null
++++ b/user/trace.c
+@@ -0,0 +1,17 @@
++#include "kernel/types.h"
++#include "kernel/stat.h"
++#include "user/user.h"
++
++int main(int argc, char *argv[])
++{
++  if(argc < 3) {
++    fprintf(2, "Usage: trace mask command [args...]\n");
++    exit(1);
++  }
++
++  int mask = atoi(argv[1]);
++  trace(mask);  // Call the sys_trace system call
++
++  exec(argv[2], &argv[2]);  // Execute the command to trace
++  exit(0);
++}
+diff --git a/user/ulib.c b/user/ulib.c
+index 0064846..afcc138 100644
+--- a/user/ulib.c
++++ b/user/ulib.c
+@@ -145,3 +145,5 @@ memcpy(void *dst, const void *src, uint n)
+ {
+   return memmove(dst, src, n);
+ }
++
++int stat(const char*, struct stat*);
+\ No newline at end of file
+diff --git a/user/user.h b/user/user.h
+index f16fe27..4566421 100644
+--- a/user/user.h
++++ b/user/user.h
+@@ -1,4 +1,6 @@
+ struct stat;
++struct sysinfo;
++    	
+ 
+ // system calls
+ int fork(void);
+@@ -22,6 +24,8 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int sysinfo(struct sysinfo*);
++int trace(int);
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+diff --git a/user/usys.pl b/user/usys.pl
+index 01e426e..2b91f10 100755
+--- a/user/usys.pl
++++ b/user/usys.pl
+@@ -36,3 +36,5 @@ entry("getpid");
+ entry("sbrk");
+ entry("sleep");
+ entry("uptime");
++entry("sysinfo");
++entry("trace");

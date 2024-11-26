@@ -6,6 +6,7 @@
 #include "defs.h"
 #include "fs.h"
 
+
 /*
  * the kernel's page table.
  */
@@ -449,3 +450,44 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+void print_pte(pagetable_t pagetable, int index, pte_t pte, uint64 pa, int level) {
+  // In thông tin PTE theo cấu trúc cây
+  for (int j = 0; j < level; j++) {
+      printf("..");
+  }
+
+  printf("%d: pte 0x00000000%lx pa 0x00000000%lx\n", index, (unsigned long)pte, (unsigned long)pa);
+
+  // Nếu PTE chỉ ra một bảng trang cấp thấp hơn, tiếp tục duyệt
+  if ((pte & PTE_V) && !(pte & (PTE_R | PTE_W | PTE_X))) {  
+    // Nếu không phải leaf node, tiếp tục đệ quy
+    pagetable_t next_table = (pagetable_t)PTE2PA(pte); // Lấy địa chỉ bảng tiếp theo
+    for (int j = 0; j < 512; j++) {
+      pte_t next_pte = next_table[j];
+      if (next_pte & PTE_V) {  // Kiểm tra PTE hợp lệ
+        uint64 next_pa = PTE2PA(next_pte);
+        print_pte(next_table, j, next_pte, next_pa, level + 1); // Tăng level
+      }
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable) {
+  printf("page table %p\n", pagetable);
+
+  // Duyệt qua tất cả các mục trong bảng trang cấp đầu tiên
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pagetable[i];
+
+    // Kiểm tra xem PTE có hợp lệ không (PTE_V bit là valid bit)
+    if ((pte & PTE_V) == 0) {
+        continue; // Bỏ qua các PTE không hợp lệ
+    }
+
+    uint64 pa = PTE2PA(pte); // Lấy địa chỉ vật lý từ PTE
+    int level = 0; // Bắt đầu từ cấp 0
+    print_pte(pagetable, i, pte, pa, level);
+  }
+}
+

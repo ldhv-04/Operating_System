@@ -453,11 +453,16 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 void print_pte(pagetable_t pagetable, int index, pte_t pte, uint64 pa, int level) {
   // In thông tin PTE theo cấu trúc cây
-  for (int j = 0; j < level; j++) {
+  for (int j = -1; j < level; j++) {
+    if(j==-1){
       printf("..");
+    }
+    else{
+      printf(" ..");
+    }
   }
 
-  printf("%d: pte 0x00000000%lx pa 0x00000000%lx\n", index, (unsigned long)pte, (unsigned long)pa);
+  printf("%d: pte %p pa %p\n", index, (void *)pte, (void *)pa);
 
   // Nếu PTE chỉ ra một bảng trang cấp thấp hơn, tiếp tục duyệt
   if ((pte & PTE_V) && !(pte & (PTE_R | PTE_W | PTE_X))) {  
@@ -474,7 +479,7 @@ void print_pte(pagetable_t pagetable, int index, pte_t pte, uint64 pa, int level
 }
 
 void vmprint(pagetable_t pagetable) {
-  printf("page table %p\n", pagetable);
+  printf("Page table %p\n", (void *)pagetable);
 
   // Duyệt qua tất cả các mục trong bảng trang cấp đầu tiên
   for (int i = 0; i < 512; i++) {
@@ -490,4 +495,3 @@ void vmprint(pagetable_t pagetable) {
     print_pte(pagetable, i, pte, pa, level);
   }
 }
-

@@ -30,3 +30,4 @@
 #define USERSTACK    1     // user stack pages
 #define MAXARG       100
 #endif
+#define PGSIZE     4096  // bytes

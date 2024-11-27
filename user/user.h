@@ -26,6 +26,7 @@ int sleep(int);
 int uptime(void);
 int sysinfo(struct sysinfo*);
 int trace(int);
+int pgaccess(void *, int, void *);
 
 // ulib.c
 int stat(const char*, struct stat*);

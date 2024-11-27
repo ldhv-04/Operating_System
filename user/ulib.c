@@ -147,3 +147,5 @@ memcpy(void *dst, const void *src, uint n)
 }
 
 int stat(const char*, struct stat*);
+
+

@@ -201,7 +201,7 @@ UPROGS=\
 	$U/_trace\
 	$U/_find\
 	$U/_sysinfotest\
-
+	$U/_pgtbltest\
 
 
 ifeq ($(LAB),syscall)
